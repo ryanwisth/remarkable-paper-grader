@@ -1,0 +1,11 @@
+{
+  "firmware": "3.27.3.0",
+  "verified": "2026-08-23",
+  "scene_from_pixel": { "x": "px_x - 809.5", "y": "px_y + 0.5" },
+  "pixel_from_scene": { "x": "scene_x + 809.5", "y": "scene_y - 0.5" },
+  "scene_x_range": [-810, 810],
+  "scene_y_range": [0, 2160],
+  "page_px": [1620, 2160],
+  "layer_cap": 5,
+  "notes": "x is center-origin (v6 file convention), y is top-origin. Exact 1:1 scale both axes at 100% zoom. Transform assumes unzoomed, unscrolled page view."
+}

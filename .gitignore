@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Runtime state written by the daemon
+work/
+cache/
+
+# Data you build locally and must not redistribute
+human_glyphs.json
+digit_bank*.json
+*.inkml
+
+# Secrets, databases, logs
+.env
+.env.*
+*.key
+*.pem
+*.db
+*.sqlite
+*.log
+
+# Tablet artifacts (vendor binaries, notebook backups, hashed builds)
+tablet/dist/
+tablet/backups/
+tablet/*-hashed.qmd
+
+# OS
+.DS_Store

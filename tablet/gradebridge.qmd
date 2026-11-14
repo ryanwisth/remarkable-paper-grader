@@ -1,0 +1,481 @@
+AFFECT /qt/qml/xofm/libs/toolbar/qml/Toolbar.qml
+    IMPORT common 1.0
+    IMPORT dk.ingatellent.SceneAssistant 1.0
+    IMPORT net.asivery.XoviMessageBroker 2.0
+    TRAVERSE FocusScope > Item#toolbar > GridLayout
+        LOCATE AFTER Repeater[.model=`toolbarProvider.editingTools`]
+        INSERT {
+
+ToolbarTool {
+    id: aiGradeButton
+    toolbar: root
+    type: ToolbarTool.Type.FoldoutButton
+    iconSource: "qrc:/ark/icons/grid"
+    enabled: true
+    visible: root.expanded
+    onPressed: root._select(aiGradeButton)
+
+    foldoutContent: ColumnLayout {
+        spacing: 0
+
+        ArkControls.FoldoutItem {
+            label: "Grade page"
+            iconSource: "qrc:/ark/icons/grid"
+            antialiasing: root.antialiasing
+            focusPolicy: Qt.NoFocus
+            Layout.fillWidth: true
+            onClicked: {
+                aiBridgeHost.gradeReq = "one " + String(Date.now());
+                aiBridgeHost.submit([
+                    { pts: [[700, 80], [760, 80]] },
+                    { pts: [[700, 95], [760, 95]] }
+                ]);
+                root._select(aiGradeButton);
+            }
+        }
+
+        ArkControls.FoldoutItem {
+            label: "Fill day log"
+            iconSource: "qrc:/ark/icons/grid"
+            antialiasing: root.antialiasing
+            focusPolicy: Qt.NoFocus
+            Layout.fillWidth: true
+            onClicked: {
+                aiBridgeHost.gradeReq = "eval " + String(Date.now());
+                aiBridgeHost.submit([
+                    { pts: [[700, 80], [760, 80]] }
+                ]);
+                root._select(aiGradeButton);
+            }
+        }
+
+        ArkControls.FoldoutItem {
+            label: "Fill after-action form"
+            iconSource: "qrc:/ark/icons/grid"
+            antialiasing: root.antialiasing
+            focusPolicy: Qt.NoFocus
+            Layout.fillWidth: true
+            onClicked: {
+                aiBridgeHost.gradeReq = "form " + String(Date.now());
+                aiBridgeHost.submit([
+                    { pts: [[700, 80], [760, 80]] }
+                ]);
+                root._select(aiGradeButton);
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 0
+
+            ArkControls.FoldoutItem {
+                label: "\u2212"
+                iconSource: "qrc:/ark/icons/grid"
+                antialiasing: root.antialiasing
+                focusPolicy: Qt.NoFocus
+                Layout.fillWidth: true
+                onClicked: { if (aiBridgeHost.pageCount > 2) aiBridgeHost.pageCount = aiBridgeHost.pageCount - 1; }
+            }
+
+            ArkControls.FoldoutItem {
+                label: "Go: " + aiBridgeHost.pageCount + " pages"
+                iconSource: "qrc:/ark/icons/grid"
+                antialiasing: root.antialiasing
+                focusPolicy: Qt.NoFocus
+                Layout.fillWidth: true
+                onClicked: {
+                    aiBridgeHost.gradeReq = "n:" + aiBridgeHost.pageCount + " " + String(Date.now());
+                    aiBridgeHost.submit([
+                        { pts: [[700, 80], [760, 80]] },
+                        { pts: [[700, 95], [760, 95]] },
+                        { pts: [[700, 110], [760, 110]] }
+                    ]);
+                    root._select(aiGradeButton);
+                }
+            }
+
+            ArkControls.FoldoutItem {
+                label: "+"
+                iconSource: "qrc:/ark/icons/grid"
+                antialiasing: root.antialiasing
+                focusPolicy: Qt.NoFocus
+                Layout.fillWidth: true
+                onClicked: { if (aiBridgeHost.pageCount < 30) aiBridgeHost.pageCount = aiBridgeHost.pageCount + 1; }
+            }
+        }
+
+        ArkControls.FoldoutItem {
+            label: "Grade all pages"
+            iconSource: "qrc:/ark/icons/grid"
+            antialiasing: root.antialiasing
+            focusPolicy: Qt.NoFocus
+            Layout.fillWidth: true
+            onClicked: {
+                aiBridgeHost.gradeReq = "all " + String(Date.now());
+                aiBridgeHost.submit([
+                    { pts: [[700, 80], [760, 80]] },
+                    { pts: [[700, 95], [760, 95]] },
+                    { pts: [[700, 110], [760, 110]] }
+                ]);
+                root._select(aiGradeButton);
+            }
+        }
+    }
+}
+
+Item {
+    id: aiBridgeHost
+    visible: false
+
+    property bool vtableReady: false
+    property string gradeReq: ""
+    property int pageCount: 3
+    property var job: null
+    property string jobState: "IDLE"
+    property string jobResult: ""
+    property int ticks: 0
+    property int aiLayer: -1
+    property int userLayer: -1
+    property int drawn: 0
+
+    function ensureReady() {
+        if (!aiBridgeHost.vtableReady) {
+            aiBridgeHost.vtableReady = SceneAssistant.ensureVtable(sceneController);
+        }
+        return aiBridgeHost.vtableReady;
+    }
+
+    function findAiLayer() {
+        for (var i = 0; i < sceneController.layerCount; ++i) {
+            if (sceneController.layerName(i) === "AI Feedback") return i;
+        }
+        return -1;
+    }
+
+    function readFileText(path) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", "file://" + path, false);
+        xhr.send();
+        return xhr.responseText;
+    }
+
+    function fail(msg) {
+        aiBridgeHost.jobResult = "ERR " + msg;
+        aiBridgeHost.jobState = "IDLE";
+        aiBridgeHost.job = null;
+        stepTimer.stop();
+        if (aiBridgeHost.userLayer >= 0) sceneController.setCurrentLayer(aiBridgeHost.userLayer);
+    }
+
+    property string itemsPath: ""
+    property real itemsCx: 0
+    property real itemsCy: 0
+
+    function submitItems(path, cx, cy) {
+        if (!sceneController) return "ERR noscene";
+        if (aiBridgeHost.jobState !== "IDLE") return "ERR busy " + aiBridgeHost.jobState;
+        aiBridgeHost.userLayer = sceneController.currentLayer;
+        aiBridgeHost.aiLayer = aiBridgeHost.findAiLayer();
+        if (aiBridgeHost.aiLayer < 0 && sceneController.layerCount >= 5) return "ERR maxlayers";
+        aiBridgeHost.itemsPath = path;
+        aiBridgeHost.itemsCx = cx;
+        aiBridgeHost.itemsCy = cy;
+        aiBridgeHost.job = null;
+        aiBridgeHost.drawn = 0;
+        aiBridgeHost.ticks = 0;
+        aiBridgeHost.jobResult = "";
+        aiBridgeHost.jobState = (aiBridgeHost.aiLayer >= 0) ? "SWITCH" : "ADD";
+        stepTimer.start();
+        return "QUEUED";
+    }
+
+    function submit(lines) {
+        if (!sceneController) return "ERR noscene";
+        if (aiBridgeHost.jobState !== "IDLE") return "ERR busy " + aiBridgeHost.jobState;
+        if (!aiBridgeHost.ensureReady()) return "ERR vtable";
+        aiBridgeHost.userLayer = sceneController.currentLayer;
+        aiBridgeHost.aiLayer = aiBridgeHost.findAiLayer();
+        if (aiBridgeHost.aiLayer < 0 && sceneController.layerCount >= 5) return "ERR maxlayers";
+        aiBridgeHost.job = lines;
+        aiBridgeHost.itemsPath = "";
+        aiBridgeHost.drawn = 0;
+        aiBridgeHost.ticks = 0;
+        aiBridgeHost.jobResult = "";
+        aiBridgeHost.jobState = (aiBridgeHost.aiLayer >= 0) ? "SWITCH" : "ADD";
+        stepTimer.start();
+        return "QUEUED";
+    }
+
+    Timer {
+        id: stepTimer
+        interval: 60
+        repeat: true
+        running: false
+
+        // one mutation per event-loop turn; verify the previous step before the next.
+        onTriggered: {
+            try {
+                if (!sceneController) { aiBridgeHost.fail("scene lost"); return; }
+                aiBridgeHost.ticks++;
+                if (aiBridgeHost.ticks > 80) { aiBridgeHost.fail("timeout in " + aiBridgeHost.jobState); return; }
+                var s = aiBridgeHost.jobState;
+
+                if (s === "ADD") {
+                    aiBridgeHost.aiLayer = sceneController.layerCount;   // index the new layer will get
+                    sceneController.addLayer();
+                    aiBridgeHost.jobState = "NAME";
+                    return;
+                }
+                if (s === "NAME") {
+                    if (sceneController.layerCount !== aiBridgeHost.aiLayer + 1) return; // add not committed yet
+                    sceneController.setLayerName(aiBridgeHost.aiLayer, "AI Feedback");
+                    aiBridgeHost.jobState = "NAMED";
+                    return;
+                }
+                if (s === "NAMED") {
+                    if (sceneController.layerName(aiBridgeHost.aiLayer) !== "AI Feedback") return;
+                    aiBridgeHost.jobState = "SWITCH";
+                    return;
+                }
+                if (s === "SWITCH") {
+                    sceneController.setCurrentLayer(aiBridgeHost.aiLayer);
+                    aiBridgeHost.jobState = "DRAW";
+                    return;
+                }
+                if (s === "DRAW") {
+                    if (sceneController.currentLayer !== aiBridgeHost.aiLayer) return; // switch not committed yet
+                    if (aiBridgeHost.itemsPath !== "") {
+                        var its = SceneAssistant.loadSceneItems(aiBridgeHost.itemsPath, sceneController);
+                        aiBridgeHost.itemsPath = "";
+                        if (!its || its.length === 0) { aiBridgeHost.fail("no items loaded"); return; }
+                        var ctr = Qt.point(aiBridgeHost.itemsCx, aiBridgeHost.itemsCy);
+                        var shape = "";
+                        var errs = [];
+                        try {
+                            sceneController.cloneAddAndSelectItems(
+                                sceneController.currentLayer, its, 1 / sceneView.defaultScale, ctr);
+                            shape = "layer,items,scale,center";
+                        } catch (e1) { errs.push("A:" + e1); }
+                        if (shape === "") {
+                            try {
+                                sceneController.cloneAddAndSelectItems(its, 1 / sceneView.defaultScale, ctr);
+                                shape = "items,scale,center";
+                            } catch (e2) { errs.push("B:" + e2); }
+                        }
+                        if (shape === "") {
+                            try {
+                                sceneController.cloneAddAndSelectItems(sceneController.currentLayer, its, ctr);
+                                shape = "layer,items,center";
+                            } catch (e3) { errs.push("C:" + e3); }
+                        }
+                        if (shape === "") {
+                            try {
+                                sceneController.cloneAddAndSelectItems(its, ctr);
+                                shape = "items,center";
+                            } catch (e4) { errs.push("D:" + e4); }
+                        }
+                        if (shape === "") { aiBridgeHost.fail("clone: " + errs.join(" | ")); return; }
+                        aiBridgeHost.jobResult = "shape=" + shape;
+                        sceneController.clearSelectedItems();
+                        sceneView.tileManager.reload();
+                        var nIts = its.length;
+                        aiBridgeHost.drawn = (typeof nIts === "number") ? nIts : 1;
+                        sceneController.setCurrentLayer(aiBridgeHost.userLayer);
+                        aiBridgeHost.jobState = "RESTORE";
+                        return;
+                    }
+                    var lines = aiBridgeHost.job;
+                    for (var j = 0; j < lines.length; ++j) {
+                        var pts = lines[j].pts;
+                        var col = lines[j].c;
+                        var rgba = lines[j].rgba;
+                        for (var k = 0; k + 1 < pts.length; ++k) {
+                            var seg = SceneAssistant.createLine(
+                                Qt.point(pts[k][0], pts[k][1]),
+                                Qt.point(pts[k + 1][0], pts[k + 1][1]));
+                            if (col !== undefined) {
+                                try {
+                                    var rec = SceneAssistant.setColorOnSceneItems([seg], col, rgba);
+                                    if (rec && rec.length > 0) seg = rec[0];
+                                } catch (colErr) { /* colour is best-effort; ink beats no ink */ }
+                            }
+                            sceneController.addDrawingLine(seg);
+                            sceneView.tileManager.renderLineToTiles(seg);
+                            aiBridgeHost.drawn++;
+                        }
+                    }
+                    sceneView.tileManager.reload();
+                    sceneController.setCurrentLayer(aiBridgeHost.userLayer);
+                    aiBridgeHost.jobState = "RESTORE";
+                    return;
+                }
+                if (s === "RESTORE") {
+                    if (sceneController.currentLayer !== aiBridgeHost.userLayer) return;
+                    aiBridgeHost.jobResult = "DONE drawn=" + aiBridgeHost.drawn + " layer=" + aiBridgeHost.aiLayer + " " + aiBridgeHost.jobResult;
+                    aiBridgeHost.jobState = "IDLE";
+                    aiBridgeHost.job = null;
+                    stepTimer.stop();
+                    return;
+                }
+            } catch (err) {
+                aiBridgeHost.fail(String(err));
+            }
+        }
+    }
+
+    Connections {
+        target: sceneView
+        function onCompletedStroke() {
+            try {
+                var xr = new XMLHttpRequest();
+                var prev = "";
+                try {
+                    xr.open("GET", "file:///home/root/rmgrade/strokes.log", false);
+                    xr.send();
+                    prev = xr.responseText;
+                } catch (e1) {}
+                if (prev.length > 100000) prev = "";
+                var xw = new XMLHttpRequest();
+                xw.open("PUT", "file:///home/root/rmgrade/strokes.log", false);
+                xw.send(prev + Date.now() + "\n");
+            } catch (e2) {}
+        }
+    }
+
+    XoviMessageBroker {
+        id: aiBroker
+        listeningFor: ["aiPing", "aiPoll", "aiInfo", "aiStatus", "aiView", "aiV2S", "aiVis", "aiPage", "aiGoto", "aiNext", "aiFwd", "aiAdopt", "aiCross", "aiItems", "aiLines"]
+
+        function onSignalReceived(sgn, message) {
+            try {
+                if (sgn === "aiPing") return "pong";
+
+                if (sgn === "aiPoll") return aiBridgeHost.gradeReq || "none";
+
+                if (sgn === "aiStatus") {
+                    return (aiBridgeHost.jobState === "IDLE")
+                        ? (aiBridgeHost.jobResult || "IDLE")
+                        : aiBridgeHost.jobState;
+                }
+
+                if (sgn === "aiInfo") {
+                    if (!sceneController) return "ERR noscene";
+                    var names = [];
+                    for (var i = 0; i < sceneController.layerCount; ++i) {
+                        names.push(sceneController.layerName(i));
+                    }
+                    return JSON.stringify({
+                        layerCount: sceneController.layerCount,
+                        currentLayer: sceneController.currentLayer,
+                        layerNames: names,
+                        pageId: String(sceneController.pageId)
+                    });
+                }
+
+                if (sgn === "aiV2S") {
+                    if (!sceneController) return "ERR noscene";
+                    var vp = message.split(",");
+                    var sp = sceneView.viewToScene(Qt.point(parseFloat(vp[0]), parseFloat(vp[1])));
+                    return JSON.stringify({x: sp.x, y: sp.y});
+                }
+
+                if (sgn === "aiPage") {
+                    if (!sceneController) return "ERR noscene";
+                    return String(sceneView.page);
+                }
+
+                if (sgn === "aiGoto") {
+                    if (!sceneController) return "ERR noscene";
+                    try { sceneView.goToPage(parseInt(message)); return "OK goto " + message; }
+                    catch (e) { return "ERR " + e; }
+                }
+
+                if (sgn === "aiNext") {
+                    if (!sceneController) return "ERR noscene";
+                    try {
+                        sceneView.goToPage(sceneView.page + 1);
+                        return "OK goToPage " + (sceneView.page + 1);
+                    } catch (e1) {
+                        try { sceneView.moveForward(); return "OK moveForward"; }
+                        catch (e2) { return "ERR " + e1 + " | " + e2; }
+                    }
+                }
+
+                if (sgn === "aiView") {
+                    if (!sceneController) return "ERR noscene";
+                    var out = { keys: Object.keys(sceneView) };
+                    var vals = {};
+                    var ks = out.keys;
+                    for (var vi = 0; vi < ks.length; ++vi) {
+                        var k = ks[vi];
+                        if (/scale|zoom|offset|content|origin|transform|pan|viewport|page|bounds/i.test(k)) {
+                            try {
+                                var v = sceneView[k];
+                                if (typeof v !== "function" && typeof v !== "object") vals[k] = v;
+                                else if (typeof v === "object" && v !== null) vals[k] = String(v);
+                            } catch (ve) {}
+                        }
+                    }
+                    out.vals = vals;
+                    try { out.tm = Object.keys(sceneView.tileManager); } catch (te) {}
+                    return JSON.stringify(out);
+                }
+
+                if (sgn === "aiVis") {
+                    if (!sceneController) return "ERR noscene";
+                    var vli = aiBridgeHost.findAiLayer();
+                    if (vli < 0) return "OK none";
+                    sceneController.setLayerVisible(vli, message === "1");
+                    sceneView.tileManager.reload();
+                    return "OK vis " + message + " layer " + vli;
+                }
+
+                if (sgn === "aiFwd") {
+                    // programmatic page-forward (the swipe path) — unlike
+                    // goToPage this CAN create a new blank page at the end
+                    if (!sceneController) return "ERR noscene";
+                    try { sceneView.moveForward(); return "OK fwd"; }
+                    catch (e) { return "ERR " + e; }
+                }
+
+                if (sgn === "aiAdopt") {
+                    if (!sceneController) return "ERR noscene";
+                    var ad = parseInt(message);
+                    if (isNaN(ad) || ad <= 0 || ad >= sceneController.layerCount) return "ERR idx";
+                    if (aiBridgeHost.findAiLayer() >= 0) return "ERR exists";
+                    sceneController.setLayerName(ad, "AI Feedback");
+                    return "OK adopt " + ad;
+                }
+
+                if (sgn === "aiCross") {
+                    var p = message.split(",");
+                    var cx = parseFloat(p[0]), cy = parseFloat(p[1]);
+                    return aiBridgeHost.submit([
+                        { pts: [[cx - 30, cy], [cx + 30, cy]] },
+                        { pts: [[cx, cy - 30], [cx, cy + 30]] }
+                    ]);
+                }
+
+                if (sgn === "aiItems") {
+                    // message = "path,cx,cy" — items JSON with baked-in colors
+                    if (!sceneController) return "ERR noscene";
+                    if (!aiBridgeHost.ensureReady()) return "ERR vtable";
+                    var ia = message.split(",");
+                    return aiBridgeHost.submitItems(ia[0], parseFloat(ia[1]), parseFloat(ia[2]));
+                }
+
+                if (sgn === "aiLines") {
+                    var batch = JSON.parse(aiBridgeHost.readFileText(message));
+                    if (!batch.lines || batch.lines.length > 2048) return "ERR batch";
+                    return aiBridgeHost.submit(batch.lines);
+                }
+            } catch (err) {
+                return "ERR " + err;
+            }
+        }
+    }
+}
+
+        }
+    END TRAVERSE
+END AFFECT

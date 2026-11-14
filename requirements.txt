@@ -1,0 +1,5 @@
+# Tested with Python 3.14 and these versions.
+numpy>=2.5
+Pillow>=12.3
+pymupdf>=1.28
+rmscene>=0.8

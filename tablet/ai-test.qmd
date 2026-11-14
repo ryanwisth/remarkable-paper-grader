@@ -1,0 +1,86 @@
+AFFECT /qt/qml/xofm/libs/toolbar/qml/Toolbar.qml
+    IMPORT common 1.0
+    IMPORT dk.ingatellent.SceneAssistant 1.0
+    TRAVERSE FocusScope > Item#toolbar > GridLayout
+        LOCATE AFTER Repeater[.model=`toolbarProvider.editingTools`]
+        INSERT {
+
+ToolbarTool {
+    id: aiTestOptions
+    toolbar: root
+    type: ToolbarTool.Type.FoldoutButton
+
+    iconSource: "qrc:/ark/icons/grid"
+    enabled: true
+    visible: root.expanded
+    onPressed: root._select(aiTestOptions)
+
+    function drawAiTest() {
+        console.log("AI-SPIKE layerCount(before):", sceneController.layerCount,
+                    "currentLayer(before):", sceneController.currentLayer);
+
+        if (!SceneAssistant.ensureVtable(sceneController)) {
+            console.log("AI-SPIKE FATAL: ensureVtable failed");
+            return;
+        }
+
+        // settled reads BEFORE any mutation; name/switch by explicit index only.
+        var userLayer = sceneController.currentLayer;
+        var aiLayer = sceneController.layerCount;   // index the new layer will get
+
+        sceneController.addLayer();
+        sceneController.setLayerName(aiLayer, "AI-TEST");
+        sceneController.setCurrentLayer(aiLayer);
+
+        // bottom region of the page, away from handwriting
+        var l = SceneAssistant.createLine(Qt.point(200, 1900), Qt.point(600, 1900));
+        sceneController.addDrawingLine(l);
+        sceneView.tileManager.renderLineToTiles(l);
+        sceneView.tileManager.reload();
+        console.log("AI-SPIKE line drawn; aiLayer =", aiLayer);
+
+        // hand control straight back to the user's own layer
+        sceneController.setCurrentLayer(userLayer);
+        console.log("AI-SPIKE returned to user layer", userLayer);
+        root._select(aiTestOptions);
+    }
+
+    foldoutContent: ColumnLayout {
+        spacing: 0
+
+        ArkControls.FoldoutItem {
+            label: "Draw AI Test"
+            iconSource: "qrc:/ark/icons/grid"
+            antialiasing: root.antialiasing
+            focusPolicy: Qt.NoFocus
+            Layout.fillWidth: true
+            onClicked: aiTestOptions.drawAiTest()
+        }
+
+        ArkControls.FoldoutItem {
+            label: "Dump Keys"
+            iconSource: "qrc:/ark/icons/grid"
+            antialiasing: root.antialiasing
+            focusPolicy: Qt.NoFocus
+            Layout.fillWidth: true
+            onClicked: {
+                console.log("AI-SPIKE keys:", Object.keys(sceneController).join(","));
+                console.log("AI-SPIKE view keys:", Object.keys(sceneView).join(","));
+                console.log("AI-SPIKE currentLayer:", sceneController.currentLayer);
+            }
+        }
+
+        ArkControls.FoldoutItem {
+            label: "Dump Scene"
+            iconSource: "qrc:/ark/icons/grid"
+            antialiasing: root.antialiasing
+            focusPolicy: Qt.NoFocus
+            Layout.fillWidth: true
+            onClicked: sceneController.dumpScene()
+        }
+    }
+}
+
+        }
+    END TRAVERSE
+END AFFECT
