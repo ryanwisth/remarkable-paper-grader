@@ -2,6 +2,8 @@
 
 Handwritten work grader for e-ink tablets: press a Grade button on a reMarkable Paper Pro, and an AI model reviews the handwritten work on that page and writes its feedback back onto the page as real pen strokes, in a separate layer the user can delete.
 
+**Plain-words write-up:** [AI feedback, handwritten onto a paper tablet](https://ryanwisth.github.io/paper-grader.html)
+
 ## Why it exists
 
 Working practice problems by hand on paper-like e-ink is good for learning, but feedback usually means retyping work into a computer or photographing it. This project closes that loop on the device itself. You write, tap Grade, and a few seconds later the margin carries a verdict, a struck-through mistake, the worked continuation from the point where things went wrong, and a short question to answer with a tick. Feedback lands in its own "AI Feedback" layer and never overwrites or erases the student's ink. The first use was exam preparation (math, reading and data practice pages).
